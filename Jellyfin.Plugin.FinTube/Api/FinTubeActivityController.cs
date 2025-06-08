@@ -58,6 +58,7 @@ public class FinTubeActivityController : ControllerBase
         public string title { get; set; } = "";
         public int track { get; set; } = 0;
         public bool removenonmusic { get; set; } = false;
+        public bool embedthumbnail { get; set; } = true;
     }
 
     /*
@@ -141,6 +142,10 @@ public class FinTubeActivityController : ControllerBase
                     args += " --prefer-free-format";
                 else
                     args += " --audio-format mp3";
+
+                if (data.embedthumbnail)
+                    args += " --embed-thumbnail";
+
                 args += $" -o \"{targetFilename}.%(ext)s\" {data.ytid}";
             }
             else

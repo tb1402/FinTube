@@ -84,12 +84,22 @@
 							<input id="fintube-track" type="number" emby-input" name="fintube-track" />
 						</div>
 
+						<!--Remove non-music checkbox-->
 						<div class="checkboxContainer checkboxContainer-withDescription">
 							<label class="emby-checkbox-label">
 								<input id="fintube-remove-non-music" name="removenonmusic" type="checkbox" is="emby-checkbox" data-embycheckbox="true" class="emby-checkbox">
 								<span class="checkboxLabel">Remove non-music parts</span>
 							<span class="checkboxOutline"><span class="material-icons checkboxIcon checkboxIcon-checked check" aria-hidden="true"></span><span class="material-icons checkboxIcon checkboxIcon-unchecked " aria-hidden="true"></span></span></label>
 							<div class="fieldDescription">Check this if you want to remove non-music parts with SponsorBlock</div>
+						</div>
+
+						<!--Embed thumbnail checkbox-->
+						<div class="checkboxContainer checkboxContainer-withDescription">
+							<label class="emby-checkbox-label">
+								<input id="fintube-audio-embed-thumbnail" name="audio-embed-thumbnail" type="checkbox" is="emby-checkbox" data-embycheckbox="true" class="emby-checkbox" checked>
+								<span class="checkboxLabel">Embed thumbnail as cover art</span>
+							<span class="checkboxOutline"><span class="material-icons checkboxIcon checkboxIcon-checked check" aria-hidden="true"></span><span class="material-icons checkboxIcon checkboxIcon-unchecked " aria-hidden="true"></span></span></label>
+							<div class="fieldDescription">Check this if you want to set the YT thumbnail as cover art</div>
 						</div>
 					</div>
 
@@ -177,7 +187,8 @@
 								"album": 				getfintubeValue("album"),
 								"title": 				getfintubeValue("title"),
 								"track":				Number(getfintubeValue("track")),
-								"removenonmusic": 		document.getElementById("fintube-remove-non-music").checked
+								"removenonmusic": 		document.getElementById("fintube-remove-non-music").checked,
+								"embedthumbnail":		document.getElementById("fintube-audio-embed-thumbnail").checked
 							}
 						
 
