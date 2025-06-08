@@ -57,6 +57,7 @@ public class FinTubeActivityController : ControllerBase
         public string album { get; set; } = "";
         public string title { get; set; } = "";
         public int track { get; set; } = 0;
+        public bool removenonmusic { get; set; } = false;
     }
 
     /*
@@ -104,7 +105,7 @@ public class FinTubeActivityController : ControllerBase
             var ffprobePath = String.Join("/", ffmpegPathSplit);
 
             bool hasFFmpeg = System.IO.File.Exists(ffmpegPath) && System.IO.File.Exists(ffprobePath);
-            if (!hasFFmpeg)
+            if (data.removenonmusic && !hasFFmpeg)
                 _logger.LogWarning($"FinTubeDownload : Built-in Jeyllfin FFmpeg not found, skipping SponsorBlock");
 
             // Ensure proper / separator
@@ -160,7 +161,7 @@ public class FinTubeActivityController : ControllerBase
             procyt.WaitForExit();
 
             // If sponsorblock is active AND ffmpeg is available AND audio only download - Try to remove non-music segments
-            if (hasFFmpeg && data.audioonly)
+            if (data.removenonmusic && hasFFmpeg && data.audioonly)
             {
                 // Get file duration with ffprobe
                 // The SponsorBlock API also returns a video duration, but according to their docs, it may not be available for all videos

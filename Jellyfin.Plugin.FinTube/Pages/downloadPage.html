@@ -84,6 +84,13 @@
 							<input id="fintube-track" type="number" emby-input" name="fintube-track" />
 						</div>
 
+						<div class="checkboxContainer checkboxContainer-withDescription">
+							<label class="emby-checkbox-label">
+								<input id="fintube-remove-non-music" name="removenonmusic" type="checkbox" is="emby-checkbox" data-embycheckbox="true" class="emby-checkbox">
+								<span class="checkboxLabel">Remove non-music parts</span>
+							<span class="checkboxOutline"><span class="material-icons checkboxIcon checkboxIcon-checked check" aria-hidden="true"></span><span class="material-icons checkboxIcon checkboxIcon-unchecked " aria-hidden="true"></span></span></label>
+							<div class="fieldDescription">Check this if you want to remove non-music parts with SponsorBlock</div>
+						</div>
 					</div>
 
 					<button id="fintube-submit" is="emby-button" type="submit" class="raised button-submit block emby-button">
@@ -169,7 +176,8 @@
 								"artist": 				getfintubeValue("artist"),
 								"album": 				getfintubeValue("album"),
 								"title": 				getfintubeValue("title"),
-								"track":				Number(getfintubeValue("track"))
+								"track":				Number(getfintubeValue("track")),
+								"removenonmusic": 		document.getElementById("fintube-remove-non-music").checked
 							}
 						
 
