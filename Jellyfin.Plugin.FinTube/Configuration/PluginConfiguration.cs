@@ -14,7 +14,7 @@ public class PluginConfiguration : BasePluginConfiguration
     {
         exec_YTDL = "/usr/local/bin/yt-dlp";
         exec_ID3 = "/usr/bin/id3v2";
-        exec_FFMPEG = "usr/bin/ffmpeg";
+        exec_FFMPEG = "/usr/bin/ffmpeg";
     }
 
     /// <summary>
