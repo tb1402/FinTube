@@ -59,6 +59,7 @@ public class FinTubeActivityController : ControllerBase
         public int track { get; set; } = 0;
         public bool removenonmusic { get; set; } = false;
         public bool embedthumbnail { get; set; } = true;
+        public bool embedmetadata { get; set; } = true;
     }
 
     /*
@@ -134,10 +135,13 @@ public class FinTubeActivityController : ControllerBase
 
             status += $"Filename: {targetFilename}<br>";
 
-            String args;
+            String args = "";
+            if (data.embedmetadata)
+                args += " --embed-metadata";
+
             if (data.audioonly)
             {
-                args = "-x";
+                args += " -x";
                 if (data.preferfreeformat)
                     args += " --prefer-free-format";
                 else
@@ -151,9 +155,9 @@ public class FinTubeActivityController : ControllerBase
             else
             {
                 if (data.preferfreeformat)
-                    args = "--prefer-free-format";
+                    args += " --prefer-free-format";
                 else
-                    args = "-f mp4";
+                    args += " -f mp4";
                 if (!string.IsNullOrEmpty(data.videoresolution))
                     args += $" -S res:{data.videoresolution}";
                 args += $" -o \"{targetFilename}-%(title)s.%(ext)s\" {data.ytid}";
