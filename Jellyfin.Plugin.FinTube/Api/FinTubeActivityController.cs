@@ -1,9 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net.Mime;
+using System.Net.Http;
+using System.Net;
+using System.Text.Json;
 using Jellyfin.Data.Entities;
 using Jellyfin.Plugin.FinTube.Configuration;
 using MediaBrowser.Controller.Configuration;
@@ -61,6 +65,10 @@ public class FinTubeActivityController : ControllerBase
 
         }
 
+        public class SponsorBlockSegment {
+            public List<float> segment {get; set;} = new List<float>();
+        }
+
         [HttpPost("submit_dl")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         public ActionResult<Dictionary<string, object>> FinTubeDownload([FromBody] FinTubeData data)
@@ -79,6 +87,7 @@ public class FinTubeActivityController : ControllerBase
                     throw new Exception("YT-DL Executable configured incorrectly");
                 
                 bool hasid3v2 = System.IO.File.Exists(config.exec_ID3);
+                bool hasFFMpeg = System.IO.File.Exists(config.exec_FFMPEG);
                 
 
                 // Ensure proper / separator
@@ -133,6 +142,61 @@ public class FinTubeActivityController : ControllerBase
                 var procyt = createProcess(config.exec_YTDL, args);
                 procyt.Start();
                 procyt.WaitForExit();
+
+                // If sponsorblock is active AND ffmpeg is available - Try to remove non-music segments
+                if (hasFFMpeg&&data.audioonly) {
+                    // Get file duration with ffprobe
+                    ProcessStartInfo startInfo=new ProcessStartInfo{
+                        FileName = "/usr/bin/ffprobe",
+                        Arguments = $"-i \"{targetFilename}{targetExtension}\" -show_entries format=duration -v quiet -of csv=\"p=0\"",
+                        UseShellExecute =false,
+                        RedirectStandardOutput = true
+                    };
+                    Process procFfprobe = new Process() { StartInfo = startInfo };
+                    procFfprobe.Start();
+                    int duration = int.Parse(procFfprobe.StandardOutput.ReadLine().Trim().Split('.')[0]);
+                    procFfprobe.WaitForExit();
+
+                    if(procFfprobe.ExitCode!=0) throw new Exception($"Ffprobe failed with code {procFfprobe.ExitCode}");
+
+                    // Fetch segments from server
+                    using HttpClient httpClient = new HttpClient();
+
+                    var request = new HttpRequestMessage(HttpMethod.Get, 
+                    $"https://sponsor.ajay.app/api/skipSegments?videoID={data.ytid}&category=music_offtopic");
+                    HttpResponseMessage sponsorResponse = httpClient.Send(request);
+
+                    if(sponsorResponse.StatusCode==HttpStatusCode.OK){
+                        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                        var segments = JsonSerializer.Deserialize<List<SponsorBlockSegment>>(sponsorResponse.Content.ReadAsStream(), options);
+
+                        List<float[]> videoSegments = new List<float[]>();
+
+                        //begin to first segment is video part, add it
+                        if(segments[0].segment[0]!=0) videoSegments.Add(new float[2]{0, segments[0].segment[0]});
+
+                        int segmentCount= segments.Count - 1;
+                        for(int i=0; i<segmentCount; i++){
+                            videoSegments.Add(new float[2]{segments[i].segment[1],segments[i+1].segment[0]});
+                        }
+
+                        //same as above for beginning, but for the end
+                        if(segments[segmentCount].segment[1] < duration) videoSegments.Add(new float[2]{segments[segmentCount].segment[1], duration});
+
+                        List<String> ffmpegBetweenStrings = new List<String>(); 
+                        foreach(float[] segment in videoSegments) 
+                            ffmpegBetweenStrings.Add($"between(t,{segment[0].ToString(CultureInfo.InvariantCulture)},{segment[1].ToString(CultureInfo.InvariantCulture)})");
+
+                        args = $"-i \"{targetFilename}{targetExtension}\" -af \"aselect='{String.Join("+",ffmpegBetweenStrings.ToArray())}',asetpts=N/SR/TB\"";
+                        args+=$" \"{targetFilename}-nmr{targetExtension}\"";
+
+                        Process procFfmpeg = createProcess(config.exec_FFMPEG, args);
+                        procFfmpeg.Start();
+                        procFfmpeg.WaitForExit();
+
+                        if(procFfmpeg.ExitCode!=0) throw new Exception($"FFMpeg failed with code {procFfmpeg.ExitCode}");
+                    }
+                }
 
                 // If audioonly AND id3v2 AND tags are set - Tag the mp3 file
                 if (data.audioonly && hasid3v2 && hasTags)
