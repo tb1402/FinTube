@@ -141,7 +141,8 @@ public class FinTubeActivityController : ControllerBase
 
             if (data.audioonly)
             {
-                args += " -x";
+                // Use the best audio format and let any necessary conversion with FFmpeg also use the best audio quality
+                args += " -x --audio-quality 0 -f \"bestaudio/best\"";
                 if (data.preferfreeformat)
                     args += " --prefer-free-format";
                 else
