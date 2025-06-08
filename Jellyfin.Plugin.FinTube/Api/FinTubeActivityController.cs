@@ -33,13 +33,7 @@ public class FinTubeActivityController : ControllerBase
     private readonly IUserManager _userManager;
     private readonly ILibraryManager _libraryManager;
 
-    public FinTubeActivityController(
-        ILoggerFactory loggerFactory,
-        IFileSystem fileSystem,
-        IServerConfigurationManager config,
-        IUserManager userManager,
-        ILibraryManager libraryManager
-    )
+    public FinTubeActivityController(ILoggerFactory loggerFactory, IFileSystem fileSystem, IServerConfigurationManager config, IUserManager userManager, ILibraryManager libraryManager)
     {
         _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<FinTubeActivityController>();
@@ -65,6 +59,14 @@ public class FinTubeActivityController : ControllerBase
         public int track { get; set; } = 0;
     }
 
+    /*
+    This class is used to decode the SponsorBlock (SB) JSON reponse into a List<SponsorBlockSegment>.
+
+    The SB API returns a JSON array with objects, each containing information about a sponsor segment.
+    The only releveant property in each object is the segement start and end, which is given as another JSON array with two float values.
+
+    This class thus has only the member segment.
+    */
     public class SponsorBlockSegment
     {
         public List<float> segment { get; set; } = new List<float>();
@@ -93,37 +95,31 @@ public class FinTubeActivityController : ControllerBase
                 throw new Exception("YT-DL Executable configured incorrectly");
 
             bool hasid3v2 = System.IO.File.Exists(config.exec_ID3);
-            bool hasFFMpeg = System.IO.File.Exists(config.exec_FFMPEG);
+
+            // check for ffmpeg and ffprobe
+            var ffmpegPath = Plugin.Instance?.FFmpegPath ?? "ffmpeg";
+
+            String[] ffmpegPathSplit = ffmpegPath.Split("/");
+            ffmpegPathSplit[ffmpegPathSplit.Length - 1] = "ffprobe";
+            var ffprobePath = String.Join("/", ffmpegPathSplit);
+
+            bool hasFFmpeg = System.IO.File.Exists(ffmpegPath) && System.IO.File.Exists(ffprobePath);
+            if (!hasFFmpeg)
+                _logger.LogWarning($"FinTubeDownload : Built-in Jeyllfin FFmpeg not found, skipping SponsorBlock");
 
             // Ensure proper / separator
-            data.targetfolder = String.Join(
-                "/",
-                data.targetfolder.Split("/", StringSplitOptions.RemoveEmptyEntries)
-            );
-            String targetPath = data.targetlibrary.EndsWith("/")
-                ? data.targetlibrary + data.targetfolder
-                : data.targetlibrary + "/" + data.targetfolder;
+            data.targetfolder = String.Join("/", data.targetfolder.Split("/", StringSplitOptions.RemoveEmptyEntries));
+            String targetPath = data.targetlibrary.EndsWith("/") ? data.targetlibrary + data.targetfolder : data.targetlibrary + "/" + data.targetfolder;
             // Create Folder if it doesn't exist
             if (!System.IO.Directory.CreateDirectory(targetPath).Exists)
                 throw new Exception("Directory could not be created");
 
             // Check for tags
-            bool hasTags =
-                1
-                < (
-                    data.title.Length
-                    + data.album.Length
-                    + data.artist.Length
-                    + data.track.ToString().Length
-                );
+            bool hasTags = 1 < (data.title.Length + data.album.Length + data.artist.Length + data.track.ToString().Length);
 
             // Save file with ytdlp as mp4 or mp3 depending on audioonly
             String targetFilename;
-            String targetExtension = (
-                data.preferfreeformat
-                    ? (data.audioonly ? @".opus" : @".webm")
-                    : (data.audioonly ? @".mp3" : @".mp4")
-            );
+            String targetExtension = (data.preferfreeformat ? (data.audioonly ? @".opus" : @".webm") : (data.audioonly ? @".mp3" : @".mp4"));
 
             if (data.audioonly && hasTags && data.title.Length > 1) // Use title Tag for filename
                 targetFilename = System.IO.Path.Combine(targetPath, $"{data.title}");
@@ -163,89 +159,97 @@ public class FinTubeActivityController : ControllerBase
             procyt.Start();
             procyt.WaitForExit();
 
-            // If sponsorblock is active AND ffmpeg is available - Try to remove non-music segments
-            if (hasFFMpeg && data.audioonly)
+            // If sponsorblock is active AND ffmpeg is available AND audio only download - Try to remove non-music segments
+            if (hasFFmpeg && data.audioonly)
             {
                 // Get file duration with ffprobe
+                // The SponsorBlock API also returns a video duration, but according to their docs, it may not be available for all videos
+                args = $"-i \"{targetFilename}{targetExtension}\" -show_entries format=duration -v quiet -of csv=\"p=0\"";
                 ProcessStartInfo startInfo = new ProcessStartInfo
                 {
-                    FileName = "/usr/bin/ffprobe",
-                    Arguments =
-                        $"-i \"{targetFilename}{targetExtension}\" -show_entries format=duration -v quiet -of csv=\"p=0\"",
+                    FileName = ffprobePath,
+                    Arguments = args,
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                 };
-                Process procFfprobe = new Process() { StartInfo = startInfo };
-                procFfprobe.Start();
-                int duration = int.Parse(
-                    procFfprobe.StandardOutput.ReadLine().Trim().Split('.')[0]
-                );
-                procFfprobe.WaitForExit();
 
-                if (procFfprobe.ExitCode != 0)
-                    throw new Exception($"Ffprobe failed with code {procFfprobe.ExitCode}");
+                Process procFFprobe = new Process() { StartInfo = startInfo };
+                procFFprobe.Start();
 
-                // Fetch segments from server
+                float duration = float.Parse(procFFprobe.StandardOutput.ReadLine().Trim());
+                procFFprobe.WaitForExit();
+
+                if (procFFprobe.ExitCode != 0)
+                    throw new Exception($"FFprobe was started with args {args} and failed with exit-code {procFFprobe.ExitCode}");
+
+                // Fetch segments from server (only category non-music)
                 using HttpClient httpClient = new HttpClient();
 
-                var request = new HttpRequestMessage(
-                    HttpMethod.Get,
-                    $"https://sponsor.ajay.app/api/skipSegments?videoID={data.ytid}&category=music_offtopic"
-                );
+                var request = new HttpRequestMessage(HttpMethod.Get, $"https://sponsor.ajay.app/api/skipSegments?videoID={data.ytid}&category=music_offtopic");
                 HttpResponseMessage sponsorResponse = httpClient.Send(request);
 
                 if (sponsorResponse.StatusCode == HttpStatusCode.OK)
                 {
+                    // Decode the JSON response
                     var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                    var segments = JsonSerializer.Deserialize<List<SponsorBlockSegment>>(
-                        sponsorResponse.Content.ReadAsStream(),
-                        options
-                    );
+                    var segments = JsonSerializer.Deserialize<List<SponsorBlockSegment>>(sponsorResponse.Content.ReadAsStream(), options);
 
-                    List<float[]> videoSegments = new List<float[]>();
+                    // In the following part the segments are "transformed".
+                    // The SponsorBlock (SB) API just returns the timestamps for the start and the end of a non-music segement.
+                    // I found it way more easy to tell FFmpeg which parts of the audio to keep and reassemble them to a new audio file,
+                    // instead of telling FFmpeg which parts to avoid.
+                    // Thus the SB segements, which are parts to avoid need to be transferred into parts to keep.
 
-                    //begin to first segment is video part, add it
+                    //list with parts to keep, each array in the list holds the start and the end of a part
+                    List<float[]> contentSegments = new List<float[]>();
+
+                    // The first segement from the API doesn't start at the beginning of the file (position 0),
+                    // that means, that there is content to keep from pos 0 to the beginning of the first segment.
                     if (segments[0].segment[0] != 0)
-                        videoSegments.Add(new float[2] { 0, segments[0].segment[0] });
+                        contentSegments.Add(new float[2] { 0, segments[0].segment[0] });
 
+                    // Now for all other segments (except the last one, that is handled below) the parts to keep are between the segements to avoid.
+                    // So each content segment starts with the end of a non-music segement and ends with the start of the next one
                     int segmentCount = segments.Count - 1;
                     for (int i = 0; i < segmentCount; i++)
-                    {
-                        videoSegments.Add(
-                            new float[2] { segments[i].segment[1], segments[i + 1].segment[0] }
-                        );
-                    }
+                        contentSegments.Add(new float[2] { segments[i].segment[1], segments[i + 1].segment[0] });
 
-                    //same as above for beginning, but for the end
+                    // If the last segement doesn't end with the end of the file,
+                    // this means that there is content between the last segment's end and the end of the file
                     if (segments[segmentCount].segment[1] < duration)
-                        videoSegments.Add(
-                            new float[2] { segments[segmentCount].segment[1], duration }
-                        );
+                        contentSegments.Add(new float[2] { segments[segmentCount].segment[1], duration });
 
+                    // To let FFmpeg built together a new file from the desired content segments,
+                    // the filter option 'aselect' is used together with the between() function
+                    // For each part of content to keep, FFMpeg needs a filter argument between(t,<content_start>,<content_end>)
+                    // see https://ffmpeg.org/ffmpeg-filters.html#select_002c-aselect
+                    // the 't' is for the format of content_start and content_end (t meaning these values are given in seconds (with fractions))
                     List<String> ffmpegBetweenStrings = new List<String>();
-                    foreach (float[] segment in videoSegments)
-                        ffmpegBetweenStrings.Add(
-                            $"between(t,{segment[0].ToString(CultureInfo.InvariantCulture)},{segment[1].ToString(CultureInfo.InvariantCulture)})"
-                        );
+                    foreach (float[] segment in contentSegments)
+                        // Use culture invariant here, as FFmpeg expects a dot as decimal seperator
+                        ffmpegBetweenStrings.Add($"between(t,{segment[0].ToString(CultureInfo.InvariantCulture)},{segment[1].ToString(CultureInfo.InvariantCulture)})");
 
-                    args =
-                        $"-i \"{targetFilename}{targetExtension}\" -af \"aselect='{String.Join("+", ffmpegBetweenStrings.ToArray())}',asetpts=N/SR/TB\"";
+                    args = $"-i \"{targetFilename}{targetExtension}\" -af \"aselect='{String.Join("+", ffmpegBetweenStrings.ToArray())}',asetpts=N/SR/TB\"";
+                    // Add nmr (non-music removed) to the target filename, this temporary file will be deleted, after ffmpeg finishes
                     args += $" \"{targetFilename}-nmr{targetExtension}\"";
 
-                    Process procFfmpeg = createProcess(config.exec_FFMPEG, args);
-                    procFfmpeg.Start();
-                    procFfmpeg.WaitForExit();
+                    Process procFFmpeg = createProcess(ffmpegPath, args);
+                    procFFmpeg.Start();
+                    procFFmpeg.WaitForExit();
 
-                    if (procFfmpeg.ExitCode != 0)
-                        throw new Exception($"FFMpeg failed with code {procFfmpeg.ExitCode}");
+                    if (procFFmpeg.ExitCode != 0)
+                        throw new Exception($"FFmpeg was started with args {args} and failed with exit-code {procFFmpeg.ExitCode}");
+
+                    // Delete the original file and move the non-music removed file into it's place
+                    System.IO.File.Delete($"{targetFilename}{targetExtension}");
+                    System.IO.File.Move($"{targetFilename}-nmr{targetExtension}", $"{targetFilename}{targetExtension}");
                 }
             }
 
             // If audioonly AND id3v2 AND tags are set - Tag the mp3 file
             if (data.audioonly && hasid3v2 && hasTags)
             {
-                args =
-                    $"-a \"{data.artist}\" -A \"{data.album}\" -t \"{data.title}\" -T \"{data.track}\" \"{targetFilename}{targetExtension}\"";
+                args = $"-a \"{data.artist}\" -A \"{data.album}\" -t \"{data.title}\" -T \"{data.track}\" \"{targetFilename}{targetExtension}\"";
 
                 status += $"Exec: {config.exec_ID3} {args}<br>";
 
@@ -272,16 +276,10 @@ public class FinTubeActivityController : ControllerBase
     {
         try
         {
-            _logger.LogInformation(
-                "FinTubeDLibraries count: {count}",
-                _libraryManager.GetVirtualFolders().Count
-            );
+            _logger.LogInformation("FinTubeDLibraries count: {count}", _libraryManager.GetVirtualFolders().Count);
 
             Dictionary<string, object> response = new Dictionary<string, object>();
-            response.Add(
-                "data",
-                _libraryManager.GetVirtualFolders().Select(i => i.Locations).ToArray()
-            );
+            response.Add("data", _libraryManager.GetVirtualFolders().Select(i => i.Locations).ToArray());
             return Ok(response);
         }
         catch (Exception e)

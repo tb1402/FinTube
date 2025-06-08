@@ -4,6 +4,7 @@ using System.Globalization;
 using Jellyfin.Plugin.FinTube.Configuration;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
+using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Model.Plugins;
 using MediaBrowser.Model.Serialization;
 
@@ -19,10 +20,13 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     /// </summary>
     /// <param name="applicationPaths">Instance of the <see cref="IApplicationPaths"/> interface.</param>
     /// <param name="xmlSerializer">Instance of the <see cref="IXmlSerializer"/> interface.</param>
-    public Plugin(IApplicationPaths applicationPaths, IXmlSerializer xmlSerializer)
+    public Plugin(IApplicationPaths applicationPaths, IXmlSerializer xmlSerializer, IServerConfigurationManager serverConfiguration)
         : base(applicationPaths, xmlSerializer)
     {
         Instance = this;
+
+        // Jellyfin's built-in FFmpeg is used for SponsorBlock
+        FFmpegPath = serverConfiguration.GetEncodingOptions().EncoderAppPathDisplay;
 
         ConfigurationChanged += OnConfigurationChanged;
     }
@@ -39,27 +43,25 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     public static Plugin? Instance { get; private set; }
     public PluginConfiguration PluginConfiguration => Configuration;
 
+    /// <summary>
+    /// Gets the full path to FFmpeg.
+    /// </summary>
+    public string FFmpegPath { get; private set; }
+
     /// <inheritdoc />
     public IEnumerable<PluginPageInfo> GetPages()
     {
         return new[]
         {
-            new PluginPageInfo
-            {
-                Name = this.Name,
-                EmbeddedResourcePath = string.Format(CultureInfo.InvariantCulture, "{0}.Configuration.configPage.html", GetType().Namespace)
-            },
-            
+            new PluginPageInfo { Name = this.Name, EmbeddedResourcePath = string.Format(CultureInfo.InvariantCulture, "{0}.Configuration.configPage.html", GetType().Namespace) },
             new PluginPageInfo
             {
                 Name = @"FinTubeDownload",
                 EmbeddedResourcePath = string.Format(CultureInfo.InvariantCulture, "{0}.Pages.downloadPage.html", GetType().Namespace),
-                EnableInMainMenu = true
-            }
+                EnableInMainMenu = true,
+            },
         };
     }
 
-    private void OnConfigurationChanged(object? sender, BasePluginConfiguration e)
-    {
-    }
+    private void OnConfigurationChanged(object? sender, BasePluginConfiguration e) { }
 }
