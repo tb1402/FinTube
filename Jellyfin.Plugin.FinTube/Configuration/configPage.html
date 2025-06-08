@@ -22,11 +22,6 @@
                         <input id="exec_ID3" name="exec_ID3" type="text" is="emby-input" />
                         <div class="fieldDescription">The executable filepath to id3v2</div>
                     </div>
-                    <div class="inputContainer">
-                        <label class="inputLabel inputLabelUnfocused" for="exec_ID3">Exec FFMPEG</label>
-                        <input id="exec_FFMPEG" name="exec_FFMPEG" type="text" is="emby-input" />
-                        <div class="fieldDescription">The executable filepath to ffmpeg</div>
-                    </div>
                     <div>
                         <button is="emby-button" type="submit" class="raised button-submit block emby-button">
                             <span>Save</span>
@@ -46,7 +41,6 @@
                     ApiClient.getPluginConfiguration(TubeFinConfig.pluginUniqueId).then(function (config) {
                         document.querySelector('#exec_YTDL').value = config.exec_YTDL;
                         document.querySelector('#exec_ID3').value = config.exec_ID3;
-                        document.querySelector('#exec_FFMPEG').value = config.exec_FFMPEG;
                         Dashboard.hideLoadingMsg();
                     });
                 });
@@ -57,7 +51,6 @@
                     ApiClient.getPluginConfiguration(TubeFinConfig.pluginUniqueId).then(function (config) {
                         config.exec_YTDL = document.querySelector('#exec_YTDL').value;
                         config.exec_ID3 = document.querySelector('#exec_ID3').value;
-                        config.exec_FFMPEG = document.querySelector('#exec_FFMPEG').value;
                         ApiClient.updatePluginConfiguration(TubeFinConfig.pluginUniqueId, config).then(function (result) {
                             Dashboard.processPluginConfigurationUpdateResult(result);
                         });
