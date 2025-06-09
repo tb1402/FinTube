@@ -14,6 +14,7 @@ public class PluginConfiguration : BasePluginConfiguration
     {
         exec_YTDL = "/usr/local/bin/yt-dlp";
         exec_ID3 = "/usr/bin/id3v2";
+        custom_ytdl_args = "";
     }
 
     /// <summary>
@@ -25,4 +26,9 @@ public class PluginConfiguration : BasePluginConfiguration
     /// Executable for ID3v2
     /// </summary>
     public string exec_ID3 { get; set; }
+
+    /// <summary>
+    /// Custom args for ytdl
+    /// </summary>
+    public string custom_ytdl_args { get; set; }
 }

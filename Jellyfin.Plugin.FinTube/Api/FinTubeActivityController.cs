@@ -135,7 +135,7 @@ public class FinTubeActivityController : ControllerBase
 
             status += $"Filename: {targetFilename}<br>";
 
-            String args = "";
+            String args = config.custom_ytdl_args;
             if (data.embedmetadata)
                 args += " --embed-metadata";
 
