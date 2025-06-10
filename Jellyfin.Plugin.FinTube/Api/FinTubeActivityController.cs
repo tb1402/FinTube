@@ -124,10 +124,46 @@ public class FinTubeActivityController : ControllerBase
             String targetFilename;
             String targetExtension = (data.preferfreeformat ? (data.audioonly ? @".opus" : @".webm") : (data.audioonly ? @".mp3" : @".mp4"));
 
-            if (data.audioonly && hasTags && data.title.Length > 1) // Use title Tag for filename
-                targetFilename = System.IO.Path.Combine(targetPath, $"{data.title}");
-            else // Use YTID as filename
-                targetFilename = System.IO.Path.Combine(targetPath, $"{data.ytid}");
+            // Use these predefined filesnames if no custom template is given
+            String ytdlOutputTemplate = "";
+            if (String.IsNullOrEmpty(config.custom_ytdl_output_template))
+            {
+                if (data.audioonly && hasTags && data.title.Length > 1) // Use title Tag with YTID for filename
+                    targetFilename = System.IO.Path.Combine(targetPath, $"{data.ytid}-{data.title}");
+                else // Use YTID as filename
+                    targetFilename = System.IO.Path.Combine(targetPath, $"{data.ytid}");
+                ytdlOutputTemplate = $" -o \"{targetFilename}.%(ext)s\"";
+            }
+            else
+            {
+                // Get the filename for the custom template directly from YTDL
+                String filenameArgs = $"{config.custom_ytdl_args} --get-filename -o \"{config.custom_ytdl_output_template}\" {data.ytid}";
+                ProcessStartInfo startInfo = new ProcessStartInfo
+                {
+                    FileName = config.exec_YTDL,
+                    Arguments = filenameArgs,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                };
+
+                Process procYTDLfilename = new Process() { StartInfo = startInfo };
+                procYTDLfilename.Start();
+
+                String ytdlFilename = procYTDLfilename.StandardOutput.ReadLine().Trim();
+                procYTDLfilename.WaitForExit();
+
+                if (procYTDLfilename.ExitCode != 0)
+                    throw new Exception($"{config.exec_YTDL} was started with args {filenameArgs} and failed with exit-code {procYTDLfilename.ExitCode}");
+
+                // Remove the extension from the filename
+                String[] filenameSplit = ytdlFilename.Split(".");
+                if (filenameSplit.Length > 0)
+                    filenameSplit[filenameSplit.Length - 1] = "";
+                ytdlFilename = String.Join(".", filenameSplit);
+
+                targetFilename = System.IO.Path.Combine(targetPath, ytdlFilename);
+                ytdlOutputTemplate = $" -o \"{targetFilename}.%(ext)s\"";
+            }
 
             // Check if filename exists
             if (System.IO.File.Exists(targetFilename))
@@ -150,8 +186,6 @@ public class FinTubeActivityController : ControllerBase
 
                 if (data.embedthumbnail)
                     args += " --embed-thumbnail";
-
-                args += $" -o \"{targetFilename}.%(ext)s\" {data.ytid}";
             }
             else
             {
@@ -161,8 +195,9 @@ public class FinTubeActivityController : ControllerBase
                     args += " -f mp4";
                 if (!string.IsNullOrEmpty(data.videoresolution))
                     args += $" -S res:{data.videoresolution}";
-                args += $" -o \"{targetFilename}-%(title)s.%(ext)s\" {data.ytid}";
             }
+            args += ytdlOutputTemplate;
+            args += $" {data.ytid}";
 
             status += $"Exec: {config.exec_YTDL} {args}<br>";
 

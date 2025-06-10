@@ -29,6 +29,13 @@
                         <input id="custom_ytdl_args" name="custom_ytdl_args" type="text" is="emby-input" />
                         <div class="fieldDescription">Additional arguments to pass to YT-DL</div>
                     </div>
+
+                    <!--Custom output template-->
+                     <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="custom_ytdl_args">Custom YT-DL output template</label>
+                        <input id="custom_ytdl_output_template" name="custom_ytdl_output_template" type="text" is="emby-input" />
+                        <div class="fieldDescription">Output template for YT-DL</div>
+                    </div>
                     <div>
                         <button is="emby-button" type="submit" class="raised button-submit block emby-button">
                             <span>Save</span>
@@ -49,6 +56,7 @@
                         document.querySelector('#exec_YTDL').value = config.exec_YTDL;
                         document.querySelector('#exec_ID3').value = config.exec_ID3;
                         document.querySelector('#custom_ytdl_args').value = config.custom_ytdl_args;
+                        document.querySelector('#custom_ytdl_output_template').value = config.custom_ytdl_output_template;
                         Dashboard.hideLoadingMsg();
                     });
                 });
@@ -60,6 +68,7 @@
                         config.exec_YTDL = document.querySelector('#exec_YTDL').value;
                         config.exec_ID3 = document.querySelector('#exec_ID3').value;
                         config.custom_ytdl_args = document.querySelector('#custom_ytdl_args').value;
+                        config.custom_ytdl_output_template = document.querySelector('#custom_ytdl_output_template').value;
                         ApiClient.updatePluginConfiguration(TubeFinConfig.pluginUniqueId, config).then(function (result) {
                             Dashboard.processPluginConfigurationUpdateResult(result);
                         });
